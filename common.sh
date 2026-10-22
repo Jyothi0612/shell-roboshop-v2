@@ -43,6 +43,54 @@ nodejs_setup(){
     validate $? "Install dependencies"
 }
 
+java_setup(){
+    dnf module enable maven:3.9 -y &>> $logs_file
+    dnf install maven java-25-openjdk-devel -y &>> $logs_file
+    validate $? "Install maven and Java"
+
+    alternatives --set java "/usr/lib/jvm/java-25-openjdk/bin/java"
+    validate $? "Setting Java 25 as default Java version"
+
+    echo "export JAVA_HOME=$(dirname $(dirname $(readlink -f /usr/bin/java)))" > /etc/profile.d/java.sh
+    source /etc/profile.d/java.sh
+    echo $JAVA_HOME
+    validate $? "Setting JAVA_HOME for maven"
+
+    mvn clean package &>> $logs_file
+    validate $? "Install dependencies"
+
+    mv target/shipping.jar shipping.jar
+    validate $? "Moving shipping.jar file"
+}
+
+mysql_client(){
+    dnf install mysql -y
+    validate $? "Installing MySql Client"
+
+    count=$(mysql -h "mysql.$domain_name" -u root -pRoboShop@1 -N -B -e "SELECT COUNT(*) FROM cities.cities;")
+
+    if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+        mysql -h "mysql.$domain_name" -uroot -pRoboShop@1 < /app/db/master-data.sql
+        validate $? "Loading shipping data"
+    else
+        echo -e "$(timestamp) [INFO] Master data already loaded...${Y}SKIPPING${N}"
+    fi
+
+    mysql -h "mysql.$domain_name" -uroot -pRoboShop@1 < /app/db/app-user.sql
+    validate $? "Creating app user"
+}
+
+python_setup(){
+    dnf install python3.14 python3.14-pip -y &>> $logs_file
+    validate $? "Installing python 3.14"
+
+    python3.14 -m venv /app/.venv
+    validate $? "Creating visrual environemnt"
+
+    /app/.venv/bin/pip install -r requirements.txt &>> $logs_file
+    validate $? "Installing dependencies"
+}
+
 app_setup(){
     id roboshop &>> $logs_file
     if [ $? -ne 0 ]; then
